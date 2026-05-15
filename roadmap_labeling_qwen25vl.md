@@ -3,7 +3,7 @@
 ## Spesifikasi Project
 - **Task**: Multimodal Aspect-Based Sentiment Analysis (MABSA) untuk review hotel Traveloka
 - **Data**: ~17.000 gambar hotel
-- **Aspek**: Kamar, Kebersihan, Makanan, Fasilitas, Lokasi
+- **Aspek**: Kamar, Kebersihan, Pelayanan, Harga, Lokasi, Fasilitas, Makanan
 - **Sentimen**: Positif, Negatif, Netral, None
 - **Hardware**: RTX 3060 Ti (8GB VRAM), RAM 16GB DDR4
 - **Model**: Qwen2.5-VL 3B via Ollama
@@ -83,49 +83,96 @@ if __name__ == "__main__":
 
 ## Tahap 3: Prompt Engineering
 
-### 3.1 Prompt Utama (Bahasa Indonesia)
+### 3.1 Prompt Utama (Chain-of-Thought, Akurat)
 
 ```python
-PROMPT_ID = """Analisis gambar review hotel ini. Tentukan sentimen untuk setiap aspek berdasarkan apa yang TERLIHAT di gambar.
+PROMPT = """Kamu adalah seorang annotator profesional untuk riset Multimodal Aspect-Based Sentiment Analysis (MABSA) pada review hotel.
 
-ASPEK:
-1. Kamar - kondisi kamar, tempat tidur, furniture, ruangan
-2. Kebersihan - tingkat kebersihan/kerapian yang terlihat
-3. Makanan - kualitas makanan/minuman jika terlihat
-4. Fasilitas - kolam renang, gym, lobby, taman, area umum
-5. Lokasi - pemandangan, view, lingkungan sekitar hotel
+TUGAS: Analisis gambar ini yang merupakan foto dari review tamu hotel di platform Traveloka. Tentukan sentimen visual untuk setiap aspek berikut.
 
-ATURAN KETAT:
-- "None" = aspek TIDAK terlihat sama sekali di gambar
-- "Netral" = aspek terlihat tapi kondisinya biasa saja
-- "Positif" = aspek terlihat dan kondisinya JELAS bagus/menarik/bersih
-- "Negatif" = aspek terlihat dan kondisinya JELAS buruk/kotor/rusak
+LANGKAH 1 - OBSERVASI:
+Perhatikan gambar dengan seksama. Identifikasi objek, kondisi, suasana, dan detail visual yang ada.
 
-JAWAB HANYA dalam format JSON berikut (tanpa penjelasan tambahan):
-{"Kamar":"...","Kebersihan":"...","Makanan":"...","Fasilitas":"...","Lokasi":"..."}"""
+LANGKAH 2 - PENILAIAN PER ASPEK:
+Untuk setiap aspek di bawah, tentukan apakah aspek tersebut TERLIHAT di gambar, lalu nilai sentimennya.
+
+7 ASPEK YANG DINILAI:
+
+1. Kamar
+   - Apa yang dicari: tempat tidur, furniture, dinding, lantai, dekorasi, ukuran ruangan, pencahayaan kamar
+   - Positif: kamar terlihat luas, bersih, tertata rapi, furniture bagus, pencahayaan baik
+   - Negatif: kamar sempit, berantakan, furniture rusak/usang, gelap, cat mengelupas
+   - None: gambar BUKAN menunjukkan kamar (misal: gambar outdoor, kolam, restoran)
+
+2. Kebersihan
+   - Apa yang dicari: noda, debu, sampah, kerapian, kondisi maintenance
+   - Positif: terlihat bersih, mengkilap, rapi, terawat, tidak ada noda/sampah
+   - Negatif: terlihat kotor, bernoda, berdebu, berantakan, ada sampah, jamur, rusak
+   - None: tidak bisa menilai kebersihan dari gambar (misal: foto terlalu dekat/blur)
+
+3. Pelayanan
+   - Apa yang dicari: staf hotel, resepsionis, bellboy, pelayan restoran, interaksi dengan tamu
+   - Positif: staf terlihat ramah, profesional, melayani tamu
+   - Negatif: staf terlihat tidak profesional, area resepsi kosong/berantakan
+   - None: TIDAK ada staf atau indikasi pelayanan terlihat di gambar (MAYORITAS gambar hotel tidak menunjukkan pelayanan)
+
+4. Harga
+   - Apa yang dicari: price tag, menu dengan harga, promosi, diskon, bill/struk
+   - Positif: terlihat harga terjangkau, ada promo/diskon
+   - Negatif: terlihat harga mahal/tidak wajar
+   - None: TIDAK ada informasi harga terlihat di gambar (MAYORITAS gambar hotel tidak menunjukkan harga)
+
+5. Lokasi
+   - Apa yang dicari: pemandangan dari jendela/balkon, lingkungan sekitar hotel, view, akses jalan, landmark
+   - Positif: pemandangan indah (laut, gunung, kota), lingkungan asri, lokasi strategis
+   - Negatif: pemandangan buruk (tembok, kumuh), lingkungan kotor, terpencil
+   - None: tidak ada pemandangan/lingkungan luar yang terlihat
+
+6. Fasilitas
+   - Apa yang dicari: kolam renang, gym, lobby, taman, playground, spa, wifi area, parkir, lift
+   - Positif: fasilitas terlihat bagus, terawat, lengkap, modern
+   - Negatif: fasilitas terlihat rusak, kotor, tidak terawat, ketinggalan zaman
+   - None: tidak ada fasilitas umum hotel yang terlihat di gambar
+
+7. Makanan
+   - Apa yang dicari: makanan, minuman, penyajian, buffet, restoran hotel, sarapan
+   - Positif: makanan terlihat menarik, porsi besar, penyajian rapi, variasi banyak
+   - Negatif: makanan terlihat tidak menarik, porsi kecil, penyajian buruk
+   - None: TIDAK ada makanan/minuman yang terlihat di gambar
+
+LANGKAH 3 - ATURAN PENTING:
+- Jika aspek TIDAK TERLIHAT sama sekali → WAJIB "None" (jangan menebak!)
+- Jika terlihat tapi tidak jelas baik/buruk → "Netral"
+- "Positif" HANYA jika ada bukti visual yang JELAS positif
+- "Negatif" HANYA jika ada bukti visual yang JELAS negatif
+- Pelayanan dan Harga biasanya "None" kecuali benar-benar terlihat di gambar
+
+LANGKAH 4 - OUTPUT:
+Berikan jawaban HANYA dalam format JSON berikut (tanpa teks lain sebelum atau sesudah):
+{"Kamar":"...","Kebersihan":"...","Pelayanan":"...","Harga":"...","Lokasi":"...","Fasilitas":"...","Makanan":"..."}"""
 ```
 
-### 3.2 Prompt dengan Chain-of-Thought (Lebih Akurat, Lebih Lambat)
+### 3.2 Prompt Ringkas (Lebih Cepat, untuk Fallback)
 
 ```python
-PROMPT_COT = """Analisis gambar review hotel ini secara detail.
+PROMPT_SHORT = """Analisis foto review hotel ini. Tentukan sentimen visual per aspek.
 
-LANGKAH 1: Identifikasi apa saja yang terlihat di gambar ini.
-LANGKAH 2: Untuk setiap aspek, tentukan apakah aspek tersebut terlihat.
-LANGKAH 3: Jika terlihat, nilai sentimen visualnya.
+Aspek: Kamar, Kebersihan, Pelayanan, Harga, Lokasi, Fasilitas, Makanan
 
-ASPEK:
-1. Kamar (tempat tidur, furniture, dinding, lantai ruangan)
-2. Kebersihan (kebersihan, kerapian, kondisi maintenance)
-3. Makanan (makanan, minuman, penyajian)
-4. Fasilitas (kolam, gym, lobby, taman, area umum)
-5. Lokasi (pemandangan luar, view, lingkungan)
+Label: "Positif" (jelas bagus), "Negatif" (jelas buruk), "Netral" (biasa saja), "None" (tidak terlihat di gambar)
 
-LABEL:
-- "None" = tidak terlihat di gambar
-- "Netral" = terlihat, kondisi standar/biasa
-- "Positif" = terlihat, kondisi bagus/menarik
-- "Negatif" = terlihat, kondisi buruk/kotor/rusak
+PENTING: Jika aspek tidak terlihat di gambar = "None". Pelayanan dan Harga biasanya "None" karena jarang terlihat di foto.
+
+Output JSON saja:
+{"Kamar":"...","Kebersihan":"...","Pelayanan":"...","Harga":"...","Lokasi":"...","Fasilitas":"...","Makanan":"..."}"""
+```
+
+### 3.3 Catatan Prompt
+- Prompt utama menggunakan Chain-of-Thought (langkah 1-4) untuk akurasi maksimal
+- Setiap aspek dilengkapi contoh positif/negatif untuk mengurangi ambiguitas
+- Pelayanan dan Harga secara eksplisit diarahkan ke "None" jika tidak terlihat
+- `num_predict` disarankan 300 untuk prompt utama
+- Estimasi speed: ~5-10 detik per gambar
 
 Berikan jawaban AKHIR dalam format JSON:
 {"Kamar":"...","Kebersihan":"...","Makanan":"...","Fasilitas":"...","Lokasi":"..."}"""
@@ -156,23 +203,73 @@ BATCH_SAVE = 50                     # Save progress setiap N gambar
 MAX_RETRIES = 3                     # Retry jika gagal
 DELAY_BETWEEN = 0.5                 # Delay antar request (detik)
 
-PROMPT = """Analisis gambar review hotel ini. Tentukan sentimen untuk setiap aspek berdasarkan apa yang TERLIHAT di gambar.
+PROMPT = """Kamu adalah seorang annotator profesional untuk riset Multimodal Aspect-Based Sentiment Analysis (MABSA) pada review hotel.
 
-ASPEK:
-1. Kamar - kondisi kamar, tempat tidur, furniture, ruangan
-2. Kebersihan - tingkat kebersihan/kerapian yang terlihat
-3. Makanan - kualitas makanan/minuman jika terlihat
-4. Fasilitas - kolam renang, gym, lobby, taman, area umum
-5. Lokasi - pemandangan, view, lingkungan sekitar hotel
+TUGAS: Analisis gambar ini yang merupakan foto dari review tamu hotel di platform Traveloka. Tentukan sentimen visual untuk setiap aspek berikut.
 
-ATURAN KETAT:
-- "None" = aspek TIDAK terlihat sama sekali di gambar
-- "Netral" = aspek terlihat tapi kondisinya biasa saja
-- "Positif" = aspek terlihat dan kondisinya JELAS bagus/menarik/bersih
-- "Negatif" = aspek terlihat dan kondisinya JELAS buruk/kotor/rusak
+LANGKAH 1 - OBSERVASI:
+Perhatikan gambar dengan seksama. Identifikasi objek, kondisi, suasana, dan detail visual yang ada.
 
-JAWAB HANYA dalam format JSON (tanpa teks lain):
-{"Kamar":"...","Kebersihan":"...","Makanan":"...","Fasilitas":"...","Lokasi":"..."}"""
+LANGKAH 2 - PENILAIAN PER ASPEK:
+Untuk setiap aspek di bawah, tentukan apakah aspek tersebut TERLIHAT di gambar, lalu nilai sentimennya.
+
+7 ASPEK YANG DINILAI:
+
+1. Kamar
+   - Apa yang dicari: tempat tidur, furniture, dinding, lantai, dekorasi, ukuran ruangan, pencahayaan kamar
+   - Positif: kamar terlihat luas, bersih, tertata rapi, furniture bagus, pencahayaan baik
+   - Negatif: kamar sempit, berantakan, furniture rusak/usang, gelap, cat mengelupas
+   - None: gambar BUKAN menunjukkan kamar (misal: gambar outdoor, kolam, restoran)
+
+2. Kebersihan
+   - Apa yang dicari: noda, debu, sampah, kerapian, kondisi maintenance
+   - Positif: terlihat bersih, mengkilap, rapi, terawat, tidak ada noda/sampah
+   - Negatif: terlihat kotor, bernoda, berdebu, berantakan, ada sampah, jamur, rusak
+   - None: tidak bisa menilai kebersihan dari gambar (misal: foto terlalu dekat/blur)
+
+3. Pelayanan
+   - Apa yang dicari: staf hotel, resepsionis, bellboy, pelayan restoran, interaksi dengan tamu
+   - Positif: staf terlihat ramah, profesional, melayani tamu
+   - Negatif: staf terlihat tidak profesional, area resepsi kosong/berantakan
+   - None: TIDAK ada staf atau indikasi pelayanan terlihat di gambar (MAYORITAS gambar hotel tidak menunjukkan pelayanan)
+
+4. Harga
+   - Apa yang dicari: price tag, menu dengan harga, promosi, diskon, bill/struk
+   - Positif: terlihat harga terjangkau, ada promo/diskon
+   - Negatif: terlihat harga mahal/tidak wajar
+   - None: TIDAK ada informasi harga terlihat di gambar (MAYORITAS gambar hotel tidak menunjukkan harga)
+
+5. Lokasi
+   - Apa yang dicari: pemandangan dari jendela/balkon, lingkungan sekitar hotel, view, akses jalan, landmark
+   - Positif: pemandangan indah (laut, gunung, kota), lingkungan asri, lokasi strategis
+   - Negatif: pemandangan buruk (tembok, kumuh), lingkungan kotor, terpencil
+   - None: tidak ada pemandangan/lingkungan luar yang terlihat
+
+6. Fasilitas
+   - Apa yang dicari: kolam renang, gym, lobby, taman, playground, spa, wifi area, parkir, lift
+   - Positif: fasilitas terlihat bagus, terawat, lengkap, modern
+   - Negatif: fasilitas terlihat rusak, kotor, tidak terawat, ketinggalan zaman
+   - None: tidak ada fasilitas umum hotel yang terlihat di gambar
+
+7. Makanan
+   - Apa yang dicari: makanan, minuman, penyajian, buffet, restoran hotel, sarapan
+   - Positif: makanan terlihat menarik, porsi besar, penyajian rapi, variasi banyak
+   - Negatif: makanan terlihat tidak menarik, porsi kecil, penyajian buruk
+   - None: TIDAK ada makanan/minuman yang terlihat di gambar
+
+LANGKAH 3 - ATURAN PENTING:
+- Jika aspek TIDAK TERLIHAT sama sekali → WAJIB "None" (jangan menebak!)
+- Jika terlihat tapi tidak jelas baik/buruk → "Netral"
+- "Positif" HANYA jika ada bukti visual yang JELAS positif
+- "Negatif" HANYA jika ada bukti visual yang JELAS negatif
+- Pelayanan dan Harga biasanya "None" kecuali benar-benar terlihat di gambar
+
+LANGKAH 4 - OUTPUT:
+Berikan jawaban HANYA dalam format JSON berikut (tanpa teks lain sebelum atau sesudah):
+{"Kamar":"...","Kebersihan":"...","Pelayanan":"...","Harga":"...","Lokasi":"...","Fasilitas":"...","Makanan":"..."}"""
+
+ASPECTS = ['Kamar', 'Kebersihan', 'Pelayanan', 'Harga', 'Lokasi', 'Fasilitas', 'Makanan']
+VALID_LABELS = ['Positif', 'Negatif', 'Netral', 'None']
 
 
 def extract_json(text):
@@ -184,12 +281,10 @@ def extract_json(text):
             json_str = text[start:end]
             result = json.loads(json_str)
             # Validasi keys
-            required = ['Kamar', 'Kebersihan', 'Makanan', 'Fasilitas', 'Lokasi']
-            valid_labels = ['Positif', 'Negatif', 'Netral', 'None']
-            for key in required:
+            for key in ASPECTS:
                 if key not in result:
                     return None
-                if result[key] not in valid_labels:
+                if result[key] not in VALID_LABELS:
                     result[key] = 'None'  # Default jika label tidak valid
             return result
     except (json.JSONDecodeError, ValueError):
@@ -210,7 +305,7 @@ def label_single_image(image_path):
                 }],
                 options={
                     'temperature': 0,
-                    'num_predict': 150,
+                    'num_predict': 300,
                     'top_p': 0.1,
                 }
             )
@@ -246,7 +341,7 @@ def save_results(results, output_path):
     """Save hasil ke CSV"""
     if not results:
         return
-    fields = ['filename', 'Kamar', 'Kebersihan', 'Makanan', 'Fasilitas', 'Lokasi']
+    fields = ['filename'] + ASPECTS
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore')
         writer.writeheader()
@@ -271,7 +366,8 @@ def main():
     print(f"Total gambar     : {len(images)}")
     print(f"Sudah diproses   : {len(done_files)}")
     print(f"Sisa             : {len(remaining)}")
-    print(f"Estimasi waktu   : {len(remaining) * 5 / 3600:.1f} jam")
+    print(f"Estimasi waktu   : {len(remaining) * 7 / 3600:.1f} jam")
+    print(f"Aspek            : {', '.join(ASPECTS)}")
     print(f"=" * 60)
     
     if not remaining:
@@ -297,12 +393,10 @@ def main():
             results.append(label)
             success += 1
         else:
-            results.append({
-                'filename': img_path.name,
-                'Kamar': 'ERROR', 'Kebersihan': 'ERROR',
-                'Makanan': 'ERROR', 'Fasilitas': 'ERROR',
-                'Lokasi': 'ERROR'
-            })
+            error_row = {'filename': img_path.name}
+            for asp in ASPECTS:
+                error_row[asp] = 'ERROR'
+            results.append(error_row)
             failed += 1
             tqdm.write(f"  FAILED: {img_path.name}")
         
@@ -342,7 +436,7 @@ def evaluate_distribution(csv_path):
     """Analisis distribusi label untuk deteksi bias"""
     df = pd.read_csv(csv_path)
     
-    aspects = ['Kamar', 'Kebersihan', 'Makanan', 'Fasilitas', 'Lokasi']
+    aspects = ['Kamar', 'Kebersihan', 'Pelayanan', 'Harga', 'Lokasi', 'Fasilitas', 'Makanan']
     
     print("=" * 60)
     print("DISTRIBUSI LABEL PER ASPEK")
@@ -415,9 +509,11 @@ def merge_with_original(original_csv, new_labels_csv, output_csv):
     rename_map = {
         'Kamar': 'img_Kamar',
         'Kebersihan': 'img_Kebersihan',
-        'Makanan': 'img_Makanan',
+        'Pelayanan': 'img_Pelayanan',
+        'Harga': 'img_Harga',
+        'Lokasi': 'img_Lokasi',
         'Fasilitas': 'img_Fasilitas',
-        'Lokasi': 'img_Lokasi'
+        'Makanan': 'img_Makanan'
     }
     new_labels = new_labels.rename(columns=rename_map)
     
