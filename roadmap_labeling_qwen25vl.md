@@ -148,8 +148,10 @@ LANGKAH 3 - ATURAN PENTING:
 - Pelayanan dan Harga biasanya "None" kecuali benar-benar terlihat di gambar
 
 LANGKAH 4 - OUTPUT:
-Berikan jawaban HANYA dalam format JSON berikut (tanpa teks lain sebelum atau sesudah):
-{"Kamar":"...","Kebersihan":"...","Pelayanan":"...","Harga":"...","Lokasi":"...","Fasilitas":"...","Makanan":"..."}"""
+Berikan jawaban HANYA dalam format JSON berikut (tanpa teks lain sebelum atau sesudah).
+Setiap aspek memiliki 2 field: label sentimen dan alasan singkat (1 kalimat konkret berdasarkan apa yang terlihat di gambar).
+
+{"Kamar":{"label":"...","alasan":"..."},"Kebersihan":{"label":"...","alasan":"..."},"Pelayanan":{"label":"...","alasan":"..."},"Harga":{"label":"...","alasan":"..."},"Lokasi":{"label":"...","alasan":"..."},"Fasilitas":{"label":"...","alasan":"..."},"Makanan":{"label":"...","alasan":"..."}}"""
 ```
 
 ### 3.2 Prompt Ringkas (Lebih Cepat, untuk Fallback)
@@ -265,8 +267,10 @@ LANGKAH 3 - ATURAN PENTING:
 - Pelayanan dan Harga biasanya "None" kecuali benar-benar terlihat di gambar
 
 LANGKAH 4 - OUTPUT:
-Berikan jawaban HANYA dalam format JSON berikut (tanpa teks lain sebelum atau sesudah):
-{"Kamar":"...","Kebersihan":"...","Pelayanan":"...","Harga":"...","Lokasi":"...","Fasilitas":"...","Makanan":"..."}"""
+Berikan jawaban HANYA dalam format JSON berikut (tanpa teks lain sebelum atau sesudah).
+Setiap aspek memiliki 2 field: label sentimen dan alasan singkat (1 kalimat konkret berdasarkan apa yang terlihat di gambar).
+
+{"Kamar":{"label":"...","alasan":"..."},"Kebersihan":{"label":"...","alasan":"..."},"Pelayanan":{"label":"...","alasan":"..."},"Harga":{"label":"...","alasan":"..."},"Lokasi":{"label":"...","alasan":"..."},"Fasilitas":{"label":"...","alasan":"..."},"Makanan":{"label":"...","alasan":"..."}}"""
 
 ASPECTS = ['Kamar', 'Kebersihan', 'Pelayanan', 'Harga', 'Lokasi', 'Fasilitas', 'Makanan']
 VALID_LABELS = ['Positif', 'Negatif', 'Netral', 'None']
@@ -280,13 +284,23 @@ def extract_json(text):
         if start != -1 and end > start:
             json_str = text[start:end]
             result = json.loads(json_str)
-            # Validasi keys
+            # Validasi keys dan flatten ke format CSV
+            flat = {}
             for key in ASPECTS:
                 if key not in result:
                     return None
-                if result[key] not in VALID_LABELS:
-                    result[key] = 'None'  # Default jika label tidak valid
-            return result
+                val = result[key]
+                if isinstance(val, dict):
+                    label = val.get('label', 'None')
+                    alasan = val.get('alasan', '-')
+                else:
+                    label = val
+                    alasan = '-'
+                if label not in VALID_LABELS:
+                    label = 'None'
+                flat[key] = label
+                flat[f'{key}_alasan'] = alasan
+            return flat
     except (json.JSONDecodeError, ValueError):
         pass
     return None
@@ -341,7 +355,7 @@ def save_results(results, output_path):
     """Save hasil ke CSV"""
     if not results:
         return
-    fields = ['filename'] + ASPECTS
+    fields = ['filename'] + [f for asp in ASPECTS for f in (asp, f'{asp}_alasan')]
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore')
         writer.writeheader()
@@ -396,6 +410,7 @@ def main():
             error_row = {'filename': img_path.name}
             for asp in ASPECTS:
                 error_row[asp] = 'ERROR'
+                error_row[f'{asp}_alasan'] = 'Gagal parsing output model'
             results.append(error_row)
             failed += 1
             tqdm.write(f"  FAILED: {img_path.name}")
