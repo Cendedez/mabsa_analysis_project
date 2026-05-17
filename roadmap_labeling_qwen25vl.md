@@ -196,7 +196,7 @@ from tqdm import tqdm
 
 # === KONFIGURASI ===
 MODEL = "qwen2.5vl:3b"
-IMAGE_DIR = "./images_resized"      # Folder gambar yang sudah di-resize
+IMAGE_DIR = "./image_cache"          # Folder gambar resolusi asli
 OUTPUT_CSV = "./hasil_labeling_qwen25vl.csv"
 CHECKPOINT_CSV = "./checkpoint_labeling.csv"
 BATCH_SAVE = 50                     # Save progress setiap N gambar
